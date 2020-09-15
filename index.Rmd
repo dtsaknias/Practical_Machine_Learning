@@ -1,7 +1,5 @@
 ---
-title: "Practical Machine Learning Course Project"
-author: "Dimosthenis Tsaknias"
-date: "15 September 2020"
+title: "Practical Machine Learning - Week 4"
 output: html_document
 ---
 
@@ -10,4 +8,3 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## R Markdown
-
