@@ -8,3 +8,45 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## R Markdown
+```{r cache=TRUE}
+library(caret)
+library(doParallel)
+library(parallel)
+
+## load the training and testing datasets
+training=read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+
+testing=read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+## remove columns which contain information about the statistics of the measurements
+obsolete_words=c("skewness", "kurtosis", "max", "min", "var", "stddev", "amplitude", "avg")
+
+obsolete_columns=c()
+
+for (o in 1:length(obsolete_words)) {
+    gg=grep(pattern=obsolete_words[o], x=colnames(training))
+    
+    obsolete_columns=c(obsolete_columns, gg)
+}
+
+## also remove measurements related to the timestamp
+obsolete_columns=c(obsolete_columns, c(1, 3:7))
+
+## work with dataset small_training
+small_training=training[, -obsolete_columns]
+
+small_training$classe=factor(small_training$classe)
+small_training$user_name=factor(small_training$user_name)
+
+## Configure parallel processing
+cluster=7
+registerDoParallel(cluster)
+
+## trainControl object
+fitControl=trainControl(method = "cv", number = 5, allowParallel = TRUE)
+
+## Random Forest
+set.seed(27)
+
+```
+
