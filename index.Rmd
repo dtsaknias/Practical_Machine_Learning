@@ -5,18 +5,30 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
 
-## R Markdown
-```{r cache=TRUE}
 library(caret)
 library(doParallel)
 library(parallel)
+```
+
+## Executive Summary
+This project will use the Weight Lifting Exercise (WLE) Dataset to evaluate qualitatively the activity of 6 participants. The goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of the participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways ("classe" A is the correct one, while B, C, D, and E are the incorrect ways).
+
+Machine learning will be used to model how well the activity is performed. Cross-validation and model errors are discussed in the report.
+
+## Analysis
+The first step is to read the WLE dataset (_adData_) which will be used to fit a model. _adData_ is tidied and the columns related to the statistics of the measurements are removed because they will not be needed to fit a model. Additionally, the measurements related to the timestamp are removed, since the quality of the activity is not related to it.
+
+### Model Selection
+
+```{r cache=TRUE}
+set.seed(27)
 
 ## load the training and testing datasets
-training=read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+adData=read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
 
-testing=read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+adData$classe=as.factor(adData$classe)
+adData$user_name=as.factor(adData$user_name)
 
 ## remove columns which contain information about the statistics of the measurements
 obsolete_words=c("skewness", "kurtosis", "max", "min", "var", "stddev", "amplitude", "avg")
@@ -24,7 +36,7 @@ obsolete_words=c("skewness", "kurtosis", "max", "min", "var", "stddev", "amplitu
 obsolete_columns=c()
 
 for (o in 1:length(obsolete_words)) {
-    gg=grep(pattern=obsolete_words[o], x=colnames(training))
+    gg=grep(pattern=obsolete_words[o], x=colnames(adData))
     
     obsolete_columns=c(obsolete_columns, gg)
 }
@@ -33,10 +45,13 @@ for (o in 1:length(obsolete_words)) {
 obsolete_columns=c(obsolete_columns, c(1, 3:7)) 
 
 ## work with dataset small_training
-small_training=training[, -obsolete_columns]
+small_adData=adData[, -obsolete_columns]
 
-small_training$classe=factor(small_training$classe)
-small_training$user_name=factor(small_training$user_name)
+## slice data to training and testing
+inTrain=createDataPartition(y=small_adData$classe, p=0.75, list=FALSE)
+
+training=small_adData[inTrain,]
+testing=small_adData[-inTrain,]
 
 ## Configure parallel processing
 cluster=7
@@ -46,7 +61,54 @@ registerDoParallel(cluster)
 fitControl=trainControl(method = "cv", number = 5, allowParallel = TRUE)
 
 ## Random Forest
-set.seed(27)
+ranfor=train(classe ~ ., data=training, method="rf", trControl=fitControl)
 
+#stopCluster(cluster)
+registerDoSEQ()
 ```
+
+The cleaned dataset is called _small_adData_ and it is partitioned to the _training_ and _testing_ datasets so that 75% is used for training and 25% for testing purposes. The chosen model to fit the training dataset is a random forest which uses all the remaining variables. In order to fit the random forest, the _caret_ package is used. The main benefit of random forests is the high accuracy, whilst the main disadvantages are the risk of overfitting, the computational cost and the interpretability. 
+
+```{r  echo=FALSE}
+print(ranfor)
+```
+Based on the output of the random forest, the final model is selected for _mtry_=29, which denotes the number of randomly selected predictors at each cut in the tree. The training data was resampled 5 times and the accuracy is 0.9916.
+
+The confusion matrix (as percentages) is:
+```{r  echo=FALSE}
+confusionMatrix.train(ranfor)
+```
+
+We can also see how the accuracy changes for different numbers of the selected predictors (with the highest achieved for _mtry_=29) 
+```{r echo=FALSE, fig.height=3, fig.width=6}
+plot(ranfor)
+```
+
+### Out-of-sample error
+The risk of using random forests is that we may overfit the model. Consequently, it is essential to use a testing dataset and estimate its accuracy. If is is significantly lower than the one in the training dataset, then it will imply that there is overfitting, and hence the model should be modified. Getting slightly lower accuracy scores is not surprising though, on the contrary it is to be expected.
+We fit the random forest model to the testing dataset and investigate its accuracy scores and the confusion matrix. The accuracy remains unchanged at 0.9916, while both the sensitivity and specifity are very high. Therefore, the out-of-sample error is not higher than the in-sample error and the model has a very good performance.
+
+```{r}
+## fit model to the testing dataset
+pred_test=predict(ranfor, newdata=testing)
+
+xtab=table(pred_test, testing$classe)
+confusionMatrix(xtab)
+```
+
+### Validation dataset
+The model is also fitted to dataset of 20 measurements which is used for the Course project prediction quiz.
+Given the accuracy of the model, it is expected that the probability of predicting correctly all 20 measurements is 0.9916^20^=0.845
+```{r}
+pred_data=read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+validation_data=pred_data[, -obsolete_columns]
+validation_data$user_name=as.factor(validation_data$user_name)
+
+## fit model
+pred_val=predict(ranfor, newdata=validation_data)
+```
+
+## Reference
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
 
